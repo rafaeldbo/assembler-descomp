@@ -9,14 +9,9 @@
     #define HEX4 292
     #define HEX5 293
     #define SW0TO7 320
-    #define SW8 321
-    #define SW9 322
     #define KEY0 352
     #define KEY1 353
-    #define KEY2 354
-    #define KEY3 355
-    #define KEY_RST 356
-    #define KEY_RST_RESET 507
+    #define FPGA_RESET 356
     #define KEY1_RESET 510
     #define KEY0_RESET 511
 
@@ -35,7 +30,7 @@
     #define LIM_DEZ_MILHARES 26
     #define LIM_CEN_MILHARES 27
 
-    #define INC_DISABLE 32
+    #define INC_DISABLE 32 # flag que desabilita o incremento
 
     # Zerando Hexas e Apagando Leds
         LDI $0
@@ -49,13 +44,12 @@
         STA @LEDR8
         STA @LEDR9
 
-    # Limpando FF dos botôes
-        STA @KEY_RST_RESET
+    # Limpando FlipFlop dos botôes
         STA @KEY0_RESET
         STA @KEY1_RESET
 
     # Inicializando Variáveis
-        LDI $0
+        LDI $0 # contagem inciada em 0
         STA @UNIDADES
         STA @DEZENAS
         STA @CENTENAS
@@ -63,7 +57,7 @@
         STA @DEZ_MILHARES
         STA @CEN_MILHARES
 
-        LDI $9
+        LDI $9 # Limite de contagem inicial de 999.999
         STA @LIM_UNIDADES
         STA @LIM_DEZENAS
         STA @LIM_CENTENAS
@@ -75,185 +69,210 @@
         LDI $0
         STA @0
         LDI $1
-        STA @1 
-        LDI $9
-        STA @9 
+        STA @1
         LDI $10
-        STA @10 # fim do setup
+        STA @10 
+    # Fim do setup
 
 # loop principal
 loop:
     # Verifica se pediu para reiniciar
-    LDA @KEY_RST # verifica FPGA_RESET
-    # AND @1
-    CEQ @0
-    JEQ @notRestart
+    LDA @FPGA_RESET # verifica FPGA_RESET
+    AND @1
+    CEQ @1 # Não tem debouncing no FPGA_RESET, então o botão é 0 quando apertado
+    JEQ @notRestart # Só reinicia a contagem se o FPGA_RESET for pressionado
     JSR @restart
     notRestart:
 
     # Verifica se pediu para configurar limite
     LDA @KEY1 # verifica KEY1
-    # AND @1
+    AND @1
     CEQ @0
-    JEQ @notConfig
+    JEQ @notConfig # Só muda pro modo de configuração de limite se o KEY1 for pressionado
     JSR @config
     notConfig:
 
     # Verifica se pediu para incrementar
     LDA @KEY0 # verifica KEY0
-    # AND @1
+    AND @1
     CEQ @0
-    JEQ @notInc
+    JEQ @notInc # Só incrementa de limite se o KEY0 for pressionado
     JSR @inc
     notInc:    
 
-    # Fim do loop
-    JSR @updateHexas
+    JSR @updateHexas # exibe contagem atualizada
     JMP @loop # fim do loop principal
 
 
 # Sub-rotinas
+
+# Função para incrementar
 inc:
-    LDI $1
-    STA @LEDR0TO7 # Aviso de que está incrementando
-
-    STA @KEY0_RESET # increment
+    STA @KEY0_RESET # limpa botão de incrementar
+    
     LDA @INC_DISABLE
-    CEQ @1
-    JEQ @endInc
-
+    CEQ @1 # verifica flag de limite de contagem / overflow (inibe incremento)
+    JEQ @endInc # se flag hablitada, não incrementa (pula pro final da função)
+    
     LDA @UNIDADES
-    ADD @1
+    ADD @1 # incrementa
     STA @UNIDADES
 
     JSR @update # atualiza valores para ficarem decimais
-    JSR @checkLimit # checka limite de contagem
+    JSR @checkLimit # checa se limite de contagem foi atingido
 
     endInc:
     RET
 
+# Função para configurar limites
 config:
-    LDI $2
-    STA @LEDR0TO7 # Aviso de que está configurando
+    STA @KEY1_RESET # limpa botão de configurar limites
+    JSR @restart # reseta contagem
 
-    STA @KEY1_RESET # config
-    JSR @restart 
+    LDI $1 # indica que está setando limite da unidade (1 led acesos)
+    STA @LEDR0TO7
 
     configUnidades:
-    LDA @SW0TO7
-    STA @LIM_UNIDADES
-    LDA @9
-    CLT @LIM_UNIDADES
-    JLT @configUnidades
-    LDA @LIM_UNIDADES
-    STA @HEX0
     LDA @KEY1
-    STA @KEY1_RESET
-    # AND @1
-    CEQ @0
+    AND @1
+    CEQ @0 # verifica se o botão de configurar foi apertado
+    LDA @SW0TO7
+    STA @HEX0 # exibe valor das chaves
     JEQ @configUnidades
+    STA @KEY1_RESET
+    STA @LIM_UNIDADES
+    LDI $9
+    CLT @LIM_UNIDADES # verifica se o limite é válido
+    JLT @configUnidades
+    # Se o limite é valido, passa pro próximo
+
+    LDI $3 # indica que está setando limite da dezena (2 leds acesos)
+    STA @LEDR0TO7
 
     configDezenas:
-    LDA @SW0TO7
-    STA @LIM_DEZENAS
-    LDA @9
-    CLT @LIM_DEZENAS
-    JLT @configUnidades
-    LDA @LIM_DEZENAS
-    STA @HEX1
     LDA @KEY1
-    STA @KEY1_RESET
-    # AND @1
-    CEQ @0
+    AND @1
+    CEQ @0 # verifica se o botão de configurar foi apertado
+    LDA @SW0TO7
+    STA @HEX1 # exibe valor das chaves
     JEQ @configDezenas
+    STA @KEY1_RESET
+    STA @LIM_DEZENAS
+    LDI $9
+    CLT @LIM_DEZENAS # verifica se o limite é válido
+    JLT @configDezenas
+    # Se o limite é valido, passa pro próximo
+
+    LDI $7 # indica que está setando limite da centena (3 leds acesos)
+    STA @LEDR0TO7
 
     configCentenas:
-    LDA @SW0TO7
-    STA @LIM_CENTENAS
-    LDA @9
-    CLT @LIM_CENTENAS
-    JLT @configUnidades
-    LDA @LIM_CENTENAS
-    STA @HEX2
     LDA @KEY1
-    STA @KEY1_RESET
-    # AND @1
-    CEQ @0
+    AND @1
+    CEQ @0 # verifica se o botão de configurar foi apertado
+    LDA @SW0TO7
+    STA @HEX2 # exibe valor das chaves
     JEQ @configCentenas
+    STA @KEY1_RESET
+    STA @LIM_CENTENAS
+    LDI $9
+    CLT @LIM_CENTENAS # verifica se o limite é válido
+    JLT @configCentenas
+    # Se o limite é valido, passa pro próximo
+
+    LDI $15 # indica que está setando limite da unidade de milhar (4 leds acesos)
+    STA @LEDR0TO7
 
     configUniMilhares:
-    LDA @SW0TO7
-    STA @LIM_UNI_MILHARES
-    LDA @9
-    CLT @LIM_UNI_MILHARES
-    JLT @configUnidades
-    LDA @LIM_UNI_MILHARES
-    STA @HEX3
     LDA @KEY1
-    STA @KEY1_RESET
-    # AND @1
-    CEQ @0
+    AND @1
+    CEQ @0 # verifica se o botão de configurar foi apertado
+    LDA @SW0TO7
+    STA @HEX3 # exibe valor das chaves
     JEQ @configUniMilhares
+    STA @KEY1_RESET
+    STA @LIM_UNI_MILHARES
+    LDI $9
+    CLT @LIM_UNI_MILHARES # verifica se o limite é válido
+    JLT @configUniMilhares
+    # Se o limite é valido, passa pro próximo
+
+    LDI $31 # indica que está setando limite da dezena de milhar (5 leds acesos)
+    STA @LEDR0TO7
 
     configDezMilhares:
-    LDA @SW0TO7
-    STA @LIM_DEZ_MILHARES
-    LDA @9
-    CLT @LIM_DEZ_MILHARES
-    JLT @configUnidades
-    LDA @LIM_DEZ_MILHARES
-    STA @HEX4
     LDA @KEY1
-    STA @KEY1_RESET
-    # AND @1
-    CEQ @0
+    AND @1
+    CEQ @0 # verifica se o botão de configurar foi apertado
+    LDA @SW0TO7
+    STA @HEX4 # exibe valor das chaves
     JEQ @configDezMilhares
+    STA @KEY1_RESET
+    STA @LIM_DEZ_MILHARES
+    LDI $9
+    CLT @LIM_DEZ_MILHARES # verifica se o limite é válido
+    JLT @configDezMilhares
+    # Se o limite é valido, passa pro próximo
+
+    LDI $63 # indica que está setando limite da centena de milhar (6 leds acesos)
+    STA @LEDR0TO7
 
     configCenMilhares:
-    LDA @SW0TO7
-    STA @LIM_CEN_MILHARES
-    LDA @9
-    CLT @LIM_CEN_MILHARES
-    JLT @configUnidades
-    LDA @LIM_CEN_MILHARES
-    STA @HEX5
     LDA @KEY1
-    STA @KEY1_RESET
-    # AND @1
-    CEQ @0
+    AND @1
+    CEQ @0 # verifica se o botão de configurar foi apertado
+    LDA @SW0TO7
+    STA @HEX5 # exibe valor das chaves
     JEQ @configCenMilhares
+    STA @KEY1_RESET
+    STA @LIM_CEN_MILHARES
+    LDI $9
+    CLT @LIM_CEN_MILHARES # verifica se o limite é válido
+    JLT @configCenMilhares
+    # Se o limite é valido finaliza configuração
 
+    LDI $0 # apaga leds 
+    STA @LEDR0TO7
+    
+    JSR @restart # reseta valores do display e limpa botões
+    JSR @checkLimit # checa se o limite de contagem foi atingido
     RET
 
+# Função para reiniciar contagem
 restart:
-    STA @KEY_RST_RESET # restart
     LDI $0
 
-    STA @INC_DISABLE
-    STA @LEDR8
-    STA @LEDR9
+    # Limpa botões
+    STA @KEY0_RESET
+    STA @KEY1_RESET
 
+    STA @INC_DISABLE # Limpa flag que inibe incremento
+    STA @LEDR8 # Limpa aviso de overflow
+    STA @LEDR9 # Limpa aviso de limite de contagem
+
+    # Limpa valores de contagem
     STA @UNIDADES
     STA @DEZENAS
     STA @CENTENAS
     STA @UNI_MILHARES
     STA @DEZ_MILHARES
     STA @CEN_MILHARES
-
-    JSR @updateHexas
+    
+    JSR @updateHexas # Atualiza displays
     RET
 
+# Função para colocar os valores em decimal
 update:
     LDA @UNIDADES 
-    CLT @10
+    CLT @10 # Verifica se precisa dar "carry out" na unidade
     JLT @endUpdate
-    LDI $0
+    LDI $0 
     STA @UNIDADES
 
     LDA @DEZENAS
     ADD @1
     STA @DEZENAS
-    CLT @10
+    CLT @10 # Verifica se precisa dar "carry out" na dezena
     JLT @endUpdate
     LDI $0
     STA @DEZENAS
@@ -261,7 +280,7 @@ update:
     LDA @CENTENAS
     ADD @1
     STA @CENTENAS
-    CLT @10
+    CLT @10 # Verifica se precisa dar "carry out" na centena
     JLT @endUpdate
     LDI $0
     STA @CENTENAS
@@ -269,7 +288,7 @@ update:
     LDA @UNI_MILHARES
     ADD @1
     STA @UNI_MILHARES
-    CLT @10
+    CLT @10 # Verifica se precisa dar "carry out" na unidade de milhar
     JLT @endUpdate
     LDI $0
     STA @UNI_MILHARES
@@ -277,7 +296,7 @@ update:
     LDA @DEZ_MILHARES
     ADD @1
     STA @DEZ_MILHARES
-    CLT @10
+    CLT @10 # Verifica se precisa dar "carry out" na dezena de milhar
     JLT @endUpdate
     LDI $0
     STA @DEZ_MILHARES
@@ -285,61 +304,64 @@ update:
     LDA @CEN_MILHARES
     ADD @1
     STA @CEN_MILHARES
-    CLT @10
+    CLT @10 # Verifica se precisa dar "carry out" na centena de milhar
     JLT @endUpdate
     LDI $0
     STA @CEN_MILHARES
 
     LDI $1
-    STA @INC_DISABLE
-    STA @LEDR8
+    STA @INC_DISABLE # Seta flag que inibe incremento
+    STA @LEDR8 # Indica que teve overflow
 
     endUpdate:
     RET
 
+# Função de checar limite de contagem
 checkLimit:
-    LDA @UNIDADES  # checkLimit
-    CLT @LIM_UNIDADES
-    JLT @endCheckLimit
+    LDA @UNIDADES 
+    CLT @LIM_UNIDADES # Checa limite da unidade
+    JLT @endCheckLimit # Se não chegou no limite, finaliza função
 
     LDA @DEZENAS
-    CLT @LIM_DEZENAS
-    JLT @endCheckLimit
+    CLT @LIM_DEZENAS # Checa limite da dezena
+    JLT @endCheckLimit # Se não chegou no limite, finaliza função
     
     LDA @CENTENAS
-    CLT @LIM_CENTENAS
-    JLT @endCheckLimit
+    CLT @LIM_CENTENAS # Checa limite da centena
+    JLT @endCheckLimit # Se não chegou no limite, finaliza função
 
     LDA @UNI_MILHARES
-    CLT @LIM_UNI_MILHARES
-    JLT @endCheckLimit
+    CLT @LIM_UNI_MILHARES # Checa limite da unidade de milhar
+    JLT @endCheckLimit # Se não chegou no limite, finaliza função
 
     LDA @DEZ_MILHARES
-    CLT @LIM_DEZ_MILHARES
-    JLT @endCheckLimit
+    CLT @LIM_DEZ_MILHARES # Checa limite da dezena de milhar
+    JLT @endCheckLimit # Se não chegou no limite, finaliza função
 
     LDA @CEN_MILHARES
-    CLT @LIM_CEN_MILHARES
-    JLT @endCheckLimit
+    CLT @LIM_CEN_MILHARES # Checa limite da centena de milhar
+    JLT @endCheckLimit # Se não chegou no limite, finaliza função
 
+    # Se chegou aqui, chegou no limite de contagem
     LDI $1
-    STA @INC_DISABLE
-    STA @LEDR9
+    STA @INC_DISABLE # Seta flag de limite de contagem
+    STA @LEDR9 # indica que o limite de contagem foi atingido
 
     endCheckLimit:
     RET
 
+# Função para exibir valores da contagem no display
 updateHexas:
-    LDA @UNIDADES # updateHexas
-    STA @HEX0
+    LDA @UNIDADES 
+    STA @HEX0 # exibe valor da unidade
     LDA @DEZENAS
-    STA @HEX1
+    STA @HEX1 # exibe valor da dezena
     LDA @CENTENAS
-    STA @HEX2
+    STA @HEX2 # exibe valor da centena
     LDA @UNI_MILHARES
-    STA @HEX3
+    STA @HEX3 # exibe valor da unidade de milhar
     LDA @DEZ_MILHARES
-    STA @HEX4
+    STA @HEX4 # exibe valor da dezena de milhar
     LDA @CEN_MILHARES
-    STA @HEX5
+    STA @HEX5 # exibe valor da centena de milhar
     RET
