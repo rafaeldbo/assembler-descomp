@@ -2,9 +2,9 @@
 
 Assembler usado nos projetos da disciplina de Design de Computadores Insper 2024.2
 
-Para compilar use:
+Para a compilar para a `Arquitetura Acumulador` use:
 ```
-py assembler.py <filename>
+py assembler_accumulator.py <filename>
 ```
 
 ## Desenvolvedores

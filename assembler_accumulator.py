@@ -63,6 +63,29 @@ MNEMONICS =	{
     'CLT':  'C',
     'JLT':  'D',
 }
+
+MIFheader = """-- Copyright (C) 2017  Intel Corporation. All rights reserved.
+-- Your use of Intel Corporation's design tools, logic functions
+-- and other software and tools, and its AMPP partner logic
+-- functions, and any output files from any of the foregoing
+-- (including device programming or simulation files), and any
+-- associated documentation or information are expressly subject
+-- to the terms and conditions of the Intel Program License
+-- Subscription Agreement, the Intel Quartus Prime License Agreement,
+-- the Intel FPGA IP License Agreement, or other applicable license
+-- agreement, including, without limitation, that your use is for
+-- the sole purpose of programming logic devices manufactured by
+-- Intel and sold by Intel or its authorized distributors.  Please
+-- refer to the applicable agreement for further details.
+
+WIDTH={width};
+DEPTH={depth};
+ADDRESS_RADIX=DEC;
+DATA_RADIX=BIN;
+
+CONTENT BEGIN
+--address : data;\n""".format(width=4+IMMEDIATE_SIZE, depth=512)
+
 global FILE_LINE
 
 # Funções de alerta de sintaxe
@@ -181,15 +204,14 @@ def parseInstruction(line: str) -> str: # converte a instrução para o formato 
 
 
 # Leitura dos arquivos
-with open(ASMfile, 'r', encoding='utf8') as f1, open(MIFfile, 'r') as f2:
-    lines = f1.readlines() # faz aquisição do código do .asm
-    HEADER_MIF = ''.join([f2.readline() for _ in range(21)]) # faz aquisição do header do arquivo .mif
+with open(ASMfile, 'r', encoding='utf8') as f:
+    lines = f.readlines() # faz aquisição do código do .asm
 
 # Escrita dos arquivos
 with open(ROMfile, 'w+') as f1, open(MIFfile, 'w+') as f2:
     
     table = SymbolTable()
-    f2.write(HEADER_MIF) # Escreve o header no arquivo initROM.mif
+    f2.write(MIFheader) # Escreve o header no arquivo initROM.mif
     try:
         # Registrando labels e defines
         preprocessed_lines = []
