@@ -7,6 +7,11 @@ Para a compilar para a `Arquitetura Acumulador` use:
 py assembler_accumulator.py <filename>
 ```
 
+Para a compilar para a `Arquitetura Registrador-Memória` use:
+```
+py assembler_reg_mem.py <filename>
+```
+
 ## Desenvolvedores
 
 - Beatriz Rodrigues de Freitas
