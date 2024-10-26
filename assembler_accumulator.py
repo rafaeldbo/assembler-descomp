@@ -33,7 +33,8 @@ elif os.path.isfile('../initROM.mif'):
     MIFfile = '../initROM.mif'
     info('Arquivo initROM.mif encontrado no diretório anterior')
 else:
-    raise FileNotFoundError('Arquivo "initROM.mif" não encontrado')
+    MIFfile = './initROM.mif'
+    info('Arquivo initROM.mif criado no diretório atual')
 
 ROMfile = './ROM.txt' # Arquivo de saída que countém o binário formatado para VHDL
 

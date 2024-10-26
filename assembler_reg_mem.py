@@ -33,7 +33,8 @@ elif os.path.isfile('../initROM.mif'):
     MIFfile = '../initROM.mif'
     info('Arquivo initROM.mif encontrado no diretório anterior')
 else:
-    raise FileNotFoundError('Arquivo "initROM.mif" não encontrado')
+    MIFfile = './initROM.mif'
+    info('Arquivo initROM.mif criado no diretório atual')
 
 ROMfile = './ROM.txt' # Arquivo de saída que countém o binário formatado para VHDL
 
@@ -67,28 +68,29 @@ MNEMONICS =	 {
     'JLT':  13,
 }
 
-INST_EMPTY_PATTERN = r'\b(?P<OPCODE>\w{3,5})\b$'
-INST_EMPTY_MOEMONICS = ['NOP', 'RET']
-INST_EMPTY_STRUCTURE = '<OPCODE>'
-
-INST_IMMEDIATE_PATTERN = r'\b(?P<OPCODE>\w{3,5})\b R(?P<REGISTER>[0-9])\b \$(?P<IMMEDIATE>\S+)$'
-INST_IMMEDIATE_MOEMONICS = ['LDI']
-INST_IMMEDIATE_STRUCTURE = '<OPCODE> R<REGISTER> $<IMMEDIATE>'
-
-INST_REG_MEM_PATTERN = r'\b(?P<OPCODE>\w{3,5})\b R(?P<REGISTER>[0-9])\b @(?P<IMMEDIATE>\S+)$'
-INST_REG_MEM_MOEMONICS = ['LDA', 'STA', *('SUM', 'SOMA', 'ADD'), 'SUB', 'AND', 'CEQ', 'CLT']
-INST_REG_MEM_STRUCTURE = '<OPCODE> R<REGISTER> @<MEM>'
-
-INST_JUMP_PATTERN = r'\b(?P<OPCODE>\w{3,5})\b @(?P<IMMEDIATE>\S+)$'
-INST_JUMP_MOEMONICS = ['JMP', 'JSR', 'JEQ', 'JLT']
-INST_JUMP_STRUCTURE = '<OPCODE> @<LINE>'
-
-INSTRUCTION_DATA_PARSER = {
-    'empty':     (INST_EMPTY_MOEMONICS,     INST_EMPTY_STRUCTURE),
-    'immediate': (INST_IMMEDIATE_MOEMONICS, INST_IMMEDIATE_STRUCTURE),
-    'reg_mem':   (INST_REG_MEM_MOEMONICS,   INST_REG_MEM_STRUCTURE),
-    'jump':      (INST_JUMP_MOEMONICS,      INST_JUMP_STRUCTURE)
+INST_MNEMONICS = {
+    'empty':     ['NOP', 'RET'],
+    'immediate': ['LDI'],
+    'reg_mem':   ['LDA', 'STA', *('SUM', 'SOMA', 'ADD'), 'SUB', 'AND', 'CEQ', 'CLT'],
+    'jump':      ['JMP', 'JSR', 'JEQ', 'JLT']
 }
+INST_PATTERN = {
+    'empty':     r'\b(?P<OPCODE>\w{3,5})\b$',
+    'immediate': r'\b(?P<OPCODE>\w{3,5})\b R(?P<REGISTER>[0-9])\b \$(?P<IMMEDIATE>\S+)$',
+    'reg_mem':   r'\b(?P<OPCODE>\w{3,5})\b R(?P<REGISTER>[0-9])\b @(?P<IMMEDIATE>\S+)$',
+    'jump':      r'\b(?P<OPCODE>\w{3,5})\b @(?P<IMMEDIATE>\S+)$'
+}
+INST_STRUCTURE = {
+    'empty':     '<OPCODE>',
+    'immediate': '<OPCODE> R<REGISTER> $<IMMEDIATE>',
+    'reg_mem':   '<OPCODE> R<REGISTER> @<MEM>',
+    'jump':      '<OPCODE> @<LINE>'
+}
+def instructionIdentifier(opcde:str) -> str | None: 
+    for instType, mnemonics in INST_MNEMONICS.items():
+        if opcde in mnemonics:
+            return instType
+    return None
         
 DEFINE_PATTERN = r'#define \b(?P<ALIAS>\S+) \b(?P<VALUE>\d+)$'
 LABEL_PATTERN = r'^(?P<LABEL>\S+):$'
@@ -181,30 +183,34 @@ def defineInstruction(line: str) -> str: # Cria a versão da linha sem comentár
 
 def parseInstruction(line: str) -> str: # converte a instrução para o formato binário
     # Identificando a estrutura da instrução
+    error = False
     # Instrução sem argumentos
-    if (match := re.match(INST_EMPTY_PATTERN, line)) is not None: 
+    if (match := re.match(INST_PATTERN['empty'], line)) is not None: 
         opcode, register, immediate = match.group('OPCODE'), '', ''
-        mnemonics, structure = INSTRUCTION_DATA_PARSER['empty']
+        mnemonics, structure = INST_MNEMONICS['empty'], INST_STRUCTURE['empty']
     # Instrução com imediato
-    elif (match := re.match(INST_IMMEDIATE_PATTERN, line)) is not None: 
+    elif (match := re.match(INST_PATTERN['immediate'], line)) is not None: 
         opcode, register, immediate = match.group('OPCODE'), match.group('REGISTER'), match.group('IMMEDIATE')
-        mnemonics, structure = INSTRUCTION_DATA_PARSER['immediate']
+        mnemonics, structure = INST_MNEMONICS['immediate'], INST_STRUCTURE['immediate']
     # Instrução com acesso a memória
-    elif (match := re.match(INST_REG_MEM_PATTERN, line)) is not None: 
+    elif (match := re.match(INST_PATTERN['reg_mem'], line)) is not None: 
         opcode, register, immediate = match.group('OPCODE'), match.group('REGISTER'), match.group('IMMEDIATE')
-        mnemonics, structure = INSTRUCTION_DATA_PARSER['reg_mem']
+        mnemonics, structure = INST_MNEMONICS['reg_mem'], INST_STRUCTURE['reg_mem']
     # Instrução de pulo
-    elif (match := re.match(INST_JUMP_PATTERN, line)) is not None: 
+    elif (match := re.match(INST_PATTERN['jump'], line)) is not None: 
         opcode, register, immediate = match.group('OPCODE'), '', match.group('IMMEDIATE')
-        mnemonics, structure = INSTRUCTION_DATA_PARSER['jump']
+        mnemonics, structure = INST_MNEMONICS['jump'], INST_STRUCTURE['jump']
+    elif ' ' in line:
+        error = True
+        opcode = line.split(' ')[0]
+        if (instType := instructionIdentifier(opcode)) is not None:
+            mnemonics, structure = INST_MNEMONICS[instType], INST_STRUCTURE[instType]
     else:
-        opcode, mnemonics = 'ERROR', MNEMONICS
+        raise ASMError(f'A estrutura dessa instrução está invalida. \nRecebido: "{line}" ')
         
-    # Tratando erros de estrutura
-    if opcode not in mnemonics:
-        if opcode == '':
-            raise ASMError(f'A estrutura dessa instrução está invalida. \nRecebido: "{line}" ')
+    if error:
         raise ASMError(f'A estrutura dessa instrução não corresponde com a estrutura da instrução "{opcode}" \nRecebido: {line} \nEsperado: {structure}')
+        
     
     # Tratamento do mnemônico
     if opcode != opcode.upper():
