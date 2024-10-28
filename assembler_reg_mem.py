@@ -82,7 +82,7 @@ INST_MNEMONICS = {
 INST_PATTERN = {
     'empty':     r'\b(?P<OPCODE>\w{3,5})\b$',
     'immediate': r'\b(?P<OPCODE>\w{3,5})\b R(?P<REGISTER>[0-9])\b \$(?P<IMMEDIATE>\S+)$',
-    'reg_mem':   r'\b(?P<OPCODE>\w{3,5})\b R(?P<REGISTER>[0-9])\b @(?P<IMMEDIATE>\S+)$',
+    'reg_mem':   r'\b(?P<OPCODE>\w{3,5})\b R(?P<REGISTER>[0-9])\b \@(?P<IMMEDIATE>\S+)$',
     'jump':      r'\b(?P<OPCODE>\w{3,5})\b @(?P<IMMEDIATE>\S+)$'
 }
 INST_STRUCTURE = {
@@ -198,33 +198,32 @@ def defineInstruction(line: str) -> str: # Cria a versão da linha sem comentár
 
 def parseInstruction(line: str) -> str: # converte a instrução para o formato binário
     # Identificando a estrutura da instrução
-    error = False
     # Instrução sem argumentos
     if (match := re.match(INST_PATTERN['empty'], line)) is not None: 
         opcode, register, immediate = match.group('OPCODE'), '', ''
-        mnemonics, structure = INST_MNEMONICS['empty'], INST_STRUCTURE['empty']
+        instType = 'empty'
     # Instrução com imediato
     elif (match := re.match(INST_PATTERN['immediate'], line)) is not None: 
         opcode, register, immediate = match.group('OPCODE'), match.group('REGISTER'), match.group('IMMEDIATE')
-        mnemonics, structure = INST_MNEMONICS['immediate'], INST_STRUCTURE['immediate']
+        instType = 'immediate'
     # Instrução com acesso a memória
     elif (match := re.match(INST_PATTERN['reg_mem'], line)) is not None: 
         opcode, register, immediate = match.group('OPCODE'), match.group('REGISTER'), match.group('IMMEDIATE')
-        mnemonics, structure = INST_MNEMONICS['reg_mem'], INST_STRUCTURE['reg_mem']
+        instType = 'reg_mem'
     # Instrução de pulo
     elif (match := re.match(INST_PATTERN['jump'], line)) is not None: 
         opcode, register, immediate = match.group('OPCODE'), '', match.group('IMMEDIATE')
-        mnemonics, structure = INST_MNEMONICS['jump'], INST_STRUCTURE['jump']
+        instType = 'jump'
     elif ' ' in line:
-        error = True
         opcode = line.split(' ')[0]
-        if (instType := instructionIdentifier(opcode)) is not None:
-            mnemonics, structure = INST_MNEMONICS[instType], INST_STRUCTURE[instType]
+        instType = 'error'
     else:
         raise ASMError(f'A estrutura dessa instrução está invalida. \nRecebido: "{line}" ')
-        
-    if error:
-        raise ASMError(f'A estrutura dessa instrução não corresponde com a estrutura da instrução "{opcode}" \nRecebido: {line} \nEsperado: {structure}')
+    
+    if (opcodeType := instructionIdentifier(opcode)) is None:
+        raise ASMError(f'Mnemônico "{opcode}" não foi identificado')
+    if opcodeType != instType:
+        raise ASMError(f'A estrutura dessa instrução não corresponde com a estrutura da instrução "{opcode}" \nRecebido: {line} \nEsperado: {INST_STRUCTURE[opcodeType]}')
         
     
     # Tratamento do mnemônico
@@ -243,6 +242,8 @@ def parseInstruction(line: str) -> str: # converte a instrução para o formato 
         # Substituição de labels/alias
         if not immediate.isdigit():
             immediate = table.get(immediate)
+        elif immediate.isdigit() and opcodeType == 'jump':
+            raise ASMError(f'Instrução de pulo sem label detectada')
         
         # Validação do valor do imediato
         if int(immediate) > 2**IMMEDIATE_SIZE-1:
