@@ -199,7 +199,10 @@ config:
 
     LDI R2 $0 # apaga leds 
     STA R2 @LEDR0TO7
-    
+
+    # Limpa unidade, já que ela continuou incrementando pela interrupção
+    STA R2 @UNIDADES
+
     JSR @restart # resaura configurações iniciais
     RET
 
