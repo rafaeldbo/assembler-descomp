@@ -66,11 +66,16 @@ MNEMONICS =	 {
     'AND':  11,
     'CLT':  12,
     'JLT':  13,
+    'RETI': 14,
+    'SUMI': 15, 'SOMAI': 15, 'ADDI': 15,
+    'CEQI': 16,
+    'ANDI': 17,
+    'CLTI': 18
 }
 
 INST_MNEMONICS = {
-    'empty':     ['NOP', 'RET'],
-    'immediate': ['LDI'],
+    'empty':     ['NOP', 'RET', 'RETI'],
+    'immediate': ['LDI', *('SUMI', 'SOMAI', 'ADDI'), 'CEQI', 'ANDI', 'CLTI'],
     'reg_mem':   ['LDA', 'STA', *('SUM', 'SOMA', 'ADD'), 'SUB', 'AND', 'CEQ', 'CLT'],
     'jump':      ['JMP', 'JSR', 'JEQ', 'JLT']
 }
@@ -137,6 +142,13 @@ def b(value:str|int, size:int) -> str: # Converte um valor para binário com 'si
 def toMIF(instrction:str) -> str: #  Transforma o formato do .mif no formato binário
     return ''.join(instrction.replace('"', '').split(' & '))
 
+def writeROM_txt(file, instruction:str, comment:str, line:int) -> None: # Escreve a instrução no arquivo ROM.txt
+    file.write(f'tmp({line}) := {instruction};\t-- {comment}\n')
+    print(f'tmp({line}) := {colorize(instruction, "cyan")};' + colorize(f"\t-- {comment}", "dark green"))
+
+def writeROM_MIF(file, instruction:str, line:int) -> None: # Escreve a instrução no arquivo initROM.mif
+    file.write(f'{line} : {toMIF(instruction)};\n')
+
 # Classe que define a tabela de símbolos
 class SymbolTable:
     def __init__(self) -> None:
@@ -159,6 +171,9 @@ class SymbolTable:
             info(f'Alias "{alias.upper()}" declarado para a posição {position} da memória')
             return
         raise ASMError(f'Alias "{alias.upper()}" já foi declarado')
+    
+    def within(self, symbol:str) -> bool:
+        return symbol.lower() in self.table.keys() or symbol.upper() in self.table.keys()
     
     def get(self, symbol:str) -> bool:
         if symbol.lower() in self.table.keys(): 
@@ -287,14 +302,18 @@ with open(ROMfile, 'w+') as f1, open(MIFfile, 'w') as f2:
                 
                 instructionLine = parseInstruction(instructionLine) # Converte imediato. Ex(JSR @14): x"9" & '0' & x"0E"
                 
-                f1.write(f'tmp({count}) := {instructionLine};\t-- {commentLine}\n') #Escreve no arquivo ROM.txt
-                                                                                    #Entrada => 1. JSR @14 #comentario1
-                                                                                    #Saída =>   1. tmp(0) := x"9" & '0' x"0E";	-- JSR @14 	#comentario1
-                f2.write(f'{count} : {toMIF(instructionLine)};\n') #Escreve no arquivo initROM.mif
-                print(f'tmp({count}) := {colorize(instructionLine, "cyan")};' + colorize(f"\t-- {commentLine}", "dark green"))
-                                                                                    
+                writeROM_MIF(f2, instructionLine, count) #Escreve no arquivo initROM.mif
+                writeROM_txt(f1, instructionLine, commentLine, count) #Escreve no arquivo ROM.txt
+                                                                      #Entrada => 1. JSR @14 #comentario1
+                                                                      #Saída =>   1. tmp(0) := x"9" & '0' x"0E";	-- JSR @14 	#comentario1                                                                                  
                 count += 1
             FILE_LINE += 1
+        if table.within('interrupt'):
+            instructionLine = parseInstruction('JMP @interrupt')
+            writeROM_MIF(f2, instructionLine, 511)
+            writeROM_txt(f1, instructionLine, 'Pula pra função de interrupção', 511)   
+            count +=1
+            
         info(f'{count} instruções escritas')
         f2.write('END;') 
                 
