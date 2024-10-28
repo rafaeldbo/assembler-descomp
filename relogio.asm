@@ -162,12 +162,12 @@ config:
     ANDI R2 $1
     CEQ R2 @0 # verifica se o botão de configurar foi apertado
     LDA R2 @SW0TO7
-    ANDI R2 $7
+    ANDI R2 $15
     STA R2 @HEX4 # exibe valor das chaves
     JEQ @configDezMilhares
     STA R2 @KEY1_RESET
     STA R2 @DEZ_MILHARES
-    LDI R2 $3
+    LDI R2 $9
     CLT R2 @DEZ_MILHARES # verifica se o limite é válido
     JLT @configDezMilhares
     # Se o limite é valido, passa pro próximo
@@ -185,6 +185,13 @@ config:
     JEQ @configCenMilhares
     STA R2 @KEY1_RESET
     STA R2 @CEN_MILHARES
+    LDA R2 @DEZ_MILHARES
+    CLTI R2 $4
+    JLT @conf_menor_2
+    LDI R2 $1
+    CLT R2 @CEN_MILHARES
+    JLT @configCenMilhares
+    conf_menor_2:
     LDI R2 $2
     CLT R2 @CEN_MILHARES # verifica se o limite é válido
     JLT @configCenMilhares
@@ -244,23 +251,33 @@ update:
     LDI R2 $0
     STA R2 @UNI_MILHARES
 
+#   carry_out_hour:
     LDA R2 @DEZ_MILHARES
     ADDI R2 $1
     STA R2 @DEZ_MILHARES
-    CLTI R2 $4 # Verifica se precisa dar "carry out" na dezena de milhar
+    CEQI R2 $4
+    JEQ @check_24hr
+    JMP @update_cen_milhares
+
+    check_24hr:
+    LDA R2 @CEN_MILHARES
+    CEQI R2 $2
+    JEQ @back_to_0
+    JMP @update_cen_milhares
+    back_to_0:
+    JSR @reset
+    JMP @endUpdate
+
+    update_cen_milhares:
+    LDA R2 @DEZ_MILHARES
+    CLTI R2 $10
     JLT @endUpdate
     LDI R2 $0
     STA R2 @DEZ_MILHARES
-
     LDA R2 @CEN_MILHARES
     ADDI R2 $1
     STA R2 @CEN_MILHARES
-    CLTI R2 $3 # Verifica se precisa dar "carry out" na centena de milhar
-    JLT @endUpdate
-    LDI R2 $0
-    STA R2 @CEN_MILHARES
-
-    JSR @reset # Reseta caso tenha chegado em 24h
+    
     endUpdate:
     RET
 
